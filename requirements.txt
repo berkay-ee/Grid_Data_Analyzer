@@ -1,0 +1,12 @@
+customtkinter
+pandas
+matplotlib
+openpyxl
+pillow
+packaging
+eptr2
+playwright
+pywebview
+pyinstaller
+numpy
+tksheet

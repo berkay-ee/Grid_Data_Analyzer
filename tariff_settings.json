@@ -1,0 +1,18 @@
+{
+    "rates": {
+        "day": 1.5,
+        "peak": 2.5,
+        "night": 0.8
+    },
+    "params": {
+        "yekdem_tahmini": 284.87,
+        "ilave_katsayi": 0.019,
+        "dengesizlik_orani": 0.0,
+        "dagitim_bedeli": 0.89537,
+        "btv": 0.01,
+        "trt": 0.0,
+        "enerji_fonu": 0.0,
+        "kdv": 0.2,
+        "profil_maliye": 3.3527
+    }
+}
