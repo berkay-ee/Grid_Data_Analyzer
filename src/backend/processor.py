@@ -202,15 +202,16 @@ class ExcelProcessor:
     def save_split_files(self, base_output_dir, source_filename=None):
         """
         Saves all split dataframes to Excel files.
-        Hierarchy: base_output_dir / source_filename / split_files...
+        Hierarchy: base_output_dir / source_filename / [AboneNo].xlsx
         """
         # Determine actual output directory
         if source_filename:
             # Strip extension if present
             folder_name = os.path.splitext(source_filename)[0]
-            target_dir = os.path.join(base_output_dir, folder_name)
+            # Create a dedicated "AboneNo" folder for the subscriber files
+            target_dir = os.path.join(base_output_dir, folder_name, "AboneNo")
         else:
-            target_dir = base_output_dir
+            target_dir = os.path.join(base_output_dir, "AboneNo")
 
         if not os.path.exists(target_dir):
             os.makedirs(target_dir)
@@ -220,9 +221,90 @@ class ExcelProcessor:
             # Apply calculations before saving
             processed_df = self.calculate_costs(df)
             
+            # The name key in split_files comes from the grouping column (Abone No)
+            # We save it directly as {AboneNo}.xlsx in the target_dir
             output_path = os.path.join(target_dir, f"{name}.xlsx")
             processed_df.to_excel(output_path, index=False)
             saved_count += 1
         
-        # Return both count and the directory used, so UI can update sidebar
+        # Return both count and the directory used (parent of AboneNo, so UI can see context), 
+        # but UI might need the specific folder to list files.
+        # Actually, let's return the target_dir (the AboneNo folder) so the sidebar lists the files correctly.
         return saved_count, target_dir
+
+    def calculate_ptf_for_folder(self, folder_path):
+        """
+        Iterates through all Excel files in the given folder, calculates PTF costs,
+        and saves them to a 'PtfHesaplama' subfolder.
+        """
+        if not os.path.exists(folder_path):
+            return False, f"Folder not found: {folder_path}"
+        
+        if self.ptf_df is None:
+            return False, "No PTF file loaded. Please select a PTF file first."
+
+        # Create output directory
+        # If folder_path is .../AboneNo, we might want to go up one level?
+        # The user request said: "Output/SourceFilename/PtfHesaplama/(AboneNo1.xlsx...)"
+        # So if we are scanning "Output/SourceFilename/AboneNo", the output should be sibling "Output/SourceFilename/PtfHesaplama"
+        
+        parent_dir = os.path.dirname(folder_path)
+        output_dir = os.path.join(parent_dir, "PtfHesaplama")
+        
+        if not os.path.exists(output_dir):
+            try:
+                os.makedirs(output_dir)
+            except OSError as e:
+                return False, f"Could not create output directory: {e}"
+
+        processed_count = 0
+        errors = []
+
+        # List all excel files in the input folder
+        files = [f for f in os.listdir(folder_path) if f.endswith(('.xlsx', '.xls'))]
+        
+        for filename in files:
+            try:
+                file_path = os.path.join(folder_path, filename)
+                
+                # Load individual subscriber file
+                df = pd.read_excel(file_path, engine='openpyxl')
+                df.columns = df.columns.str.strip()
+                
+                # Identify required columns
+                cols = {c.lower(): c for c in df.columns}
+                
+                # Merge with PTF
+                # We need to ensure we merge on Tarih/Saat.
+                # Assuming the subscriber file has these columns.
+                
+                # 1. Clean/Prepare Date/Time columns in Subscriber File if needed
+                # (Assuming they match the format in PTF file or are standard datetime)
+                
+                # Merge
+                # Check for existing PTF columns to avoid duplicates/suffixes
+                cols_to_drop = [c for c in self.ptf_df.columns if c in df.columns and c not in ['Tarih', 'Saat']]
+                df.drop(columns=cols_to_drop, inplace=True, errors='ignore')
+                
+                merged_df = pd.merge(df, self.ptf_df, on=["Tarih", "Saat"], how="left")
+                
+                # 2. Perform Calculations
+                # Gerçek Tüketim (MWh)
+                cons_col = cols.get('aktif çekiş') or cols.get('consumption')
+                
+                if cons_col and "PTF (TL/MWh)" in merged_df.columns:
+                    merged_df["Gerçek Tüketim (MWh)"] = merged_df[cons_col] / 1000.0
+                    merged_df["PTF x Gerçekleşen Tüketim"] = merged_df["Gerçek Tüketim (MWh)"] * merged_df["PTF (TL/MWh)"]
+                
+                # Save to new folder
+                save_path = os.path.join(output_dir, filename)
+                merged_df.to_excel(save_path, index=False)
+                processed_count += 1
+                
+            except Exception as e:
+                errors.append(f"{filename}: {str(e)}")
+        
+        if processed_count == 0 and errors:
+            return False, f"Failed to process files. Errors: {'; '.join(errors[:3])}..."
+            
+        return True, f"Processed {processed_count} files. Saved to {output_dir}"

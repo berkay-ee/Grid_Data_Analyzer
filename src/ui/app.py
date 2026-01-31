@@ -99,7 +99,10 @@ class App(ctk.CTk):
         # Add "Import Consumption" button to sidebar bottom_frame
         # The PTF buttons are now handled inside the Sidebar class itself
         self.btn_open = ctk.CTkButton(self.sidebar.bottom_frame, text="2. Import Consumption & Split", command=self.import_file)
-        self.btn_open.pack(fill="x", pady=0)
+        self.btn_open.pack(fill="x", pady=(0, 5))
+
+        self.btn_calc = ctk.CTkButton(self.sidebar.bottom_frame, text="3. Calculate PTF for Folder", command=self.calculate_ptf_folder)
+        self.btn_calc.pack(fill="x", pady=0)
 
         # Initialize PTF List
         self.refresh_ptf_list()
@@ -380,6 +383,31 @@ class App(ctk.CTk):
                 messagebox.showerror("Save Error", err)
         else:
             messagebox.showwarning("Warning", "Output directory not set. Changes only saved in memory.")
+
+    def calculate_ptf_folder(self):
+        """Handler for 'Calculate PTF for Folder' button."""
+        # 1. Ensure PTF is loaded
+        if self.processor.ptf_df is None:
+            messagebox.showwarning("Warning", "No PTF file loaded.\nPlease select a PTF file first.")
+            return
+
+        # 2. Select Folder
+        # Default to current output directory if exists
+        initial_dir = self.output_directory if os.path.exists(self.output_directory) else os.getcwd()
+        
+        folder_path = filedialog.askdirectory(title="Select Folder containing Subscriber Files", initialdir=initial_dir)
+        if not folder_path:
+            return
+
+        # 3. Process
+        self.log(f"Starting PTF calculation for folder: {folder_path}...")
+        success, msg = self.processor.calculate_ptf_for_folder(folder_path)
+        
+        self.log(msg)
+        if success:
+            messagebox.showinfo("Success", msg)
+        else:
+            messagebox.showerror("Error", msg)
 
 if __name__ == "__main__":
     app = App()
